@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data is downloaded by the pipeline, never stored in Git
+data/
+
+# Secrets
+.env
+
+# Editors and operating systems
+.vscode/
+.DS_Store
+Thumbs.db

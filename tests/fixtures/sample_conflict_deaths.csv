@@ -1,0 +1,55 @@
+Entity,Code,Year,Deaths in ongoing conflicts (best estimate)
+Northland,NTH,2018,1000
+Northland,NTH,2019,1000
+Northland,NTH,2020,1000
+Northland,NTH,2021,1000
+Northland,NTH,2022,1000
+Northland,NTH,2023,1000
+Northland,NTH,2024,1000
+Northland,NTH,2025,1100
+Northland,NTH,2026,400
+Southland,STH,2018,100
+Southland,STH,2019,100
+Southland,STH,2020,100
+Southland,STH,2021,100
+Southland,STH,2022,100
+Southland,STH,2023,100
+Southland,STH,2024,100
+Southland,STH,2025,500
+Southland,STH,2026,200
+Eastland,EST,2018,0
+Eastland,EST,2019,0
+Eastland,EST,2020,0
+Eastland,EST,2021,0
+Eastland,EST,2022,0
+Eastland,EST,2023,0
+Eastland,EST,2024,0
+Eastland,EST,2025,300
+Eastland,EST,2026,150
+Westland,WST,2018,10
+Westland,WST,2019,10
+Westland,WST,2020,10
+Westland,WST,2021,10
+Westland,WST,2022,10
+Westland,WST,2023,10
+Westland,WST,2024,10
+Westland,WST,2025,40
+Westland,WST,2026,5
+Northern Region,,2018,1010
+World,OWID_WRL,2018,1110
+Northern Region,,2019,1010
+World,OWID_WRL,2019,1110
+Northern Region,,2020,1010
+World,OWID_WRL,2020,1110
+Northern Region,,2021,1010
+World,OWID_WRL,2021,1110
+Northern Region,,2022,1010
+World,OWID_WRL,2022,1110
+Northern Region,,2023,1010
+World,OWID_WRL,2023,1110
+Northern Region,,2024,1010
+World,OWID_WRL,2024,1110
+Northern Region,,2025,1140
+World,OWID_WRL,2025,1940
+Northern Region,,2026,405
+World,OWID_WRL,2026,755
