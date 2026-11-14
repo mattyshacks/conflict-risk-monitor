@@ -14,6 +14,13 @@ from conflict_monitor import analysis, brief, config
 
 BLUE = "#2a78d6"  # the one colour used for data
 GREY = "#8a8a86"  # used for preliminary figures and guide lines
+# One colour per type of violence, in the order of config.VIOLENCE_TYPES.
+# Each type always keeps its colour, whichever country is shown. Dark mode uses
+# the same hues adjusted for a dark background; both sets were checked for
+# colour-blind readers with the palette validator.
+#   states: aqua, civil: orange, armed groups: blue, civilians: red, colonial: violet
+TYPE_COLOURS_LIGHT = ["#1baf7a", "#eb6834", "#2a78d6", "#e34948", "#6250d6"]
+TYPE_COLOURS_DARK = ["#199e70", "#d95926", "#3987e5", "#e66767", "#9085e9"]
 
 
 def trend_chart(df: pd.DataFrame) -> alt.Chart:
@@ -74,6 +81,86 @@ def ranked_bars(df: pd.DataFrame) -> alt.Chart:
     return (bars + values).properties(height=alt.Step(30))
 
 
+def type_colour(df: pd.DataFrame) -> alt.Color:
+    """Colour by type of violence. Shared by every type chart so the colours always match."""
+    all_types = list(config.VIOLENCE_TYPES.values())
+    # Only list the types that appear, but keep each type's own colour.
+    shown = [name for name in all_types if name in set(df["violence_type"])]
+    palette = TYPE_COLOURS_DARK if st.context.theme.type == "dark" else TYPE_COLOURS_LIGHT
+    colours = [palette[all_types.index(name)] for name in shown]
+    return alt.Color("violence_type:N", title=None,
+                     scale=alt.Scale(domain=shown, range=colours),
+                     legend=alt.Legend(orient="top", direction="horizontal", labelLimit=260))
+
+
+def stack_order(df: pd.DataFrame) -> pd.DataFrame:
+    """Add a column that stacks the types in the same order in every chart."""
+    all_types = list(config.VIOLENCE_TYPES.values())
+    return df.assign(stack_order=df["violence_type"].map(all_types.index))
+
+
+def type_chart(df: pd.DataFrame, years: list[int]) -> alt.Chart:
+    """Stacked bars: one bar per year, split into the types of violence."""
+    df = stack_order(df)
+
+    # Every year gets a slot, so a year with no deaths shows as a gap, not as missing.
+    x = alt.X("year:O", scale=alt.Scale(domain=years), axis=alt.Axis(
+        title=None, labelAngle=0, labelExpr="datum.value % 5 == 0 ? datum.label : ''"))
+    number_format = "~s" if df.groupby("year")["deaths"].sum().max() >= 10_000 else ","
+    y = alt.Y("deaths:Q", stack=True, axis=alt.Axis(
+        title=None, format=number_format, tickMinStep=1,
+        labelExpr="datum.value == 0 ? '0' : datum.label"))
+    tooltip = [alt.Tooltip("year:O", title="Year"),
+               alt.Tooltip("violence_type:N", title="Type"),
+               alt.Tooltip("deaths:Q", title="Deaths", format=",")]
+
+    return alt.Chart(df).mark_bar().encode(
+        x=x, y=y, color=type_colour(df), order=alt.Order("stack_order:Q"), tooltip=tooltip,
+    ).properties(height=300)
+
+
+def top_countries_type_chart(df: pd.DataFrame) -> alt.Chart:
+    """Horizontal stacked bars: one bar per country, largest first, split into types.
+
+    The country's total is written at the end of each bar, as in ranked_bars().
+    """
+    df = stack_order(df)
+    countries = df["country"].drop_duplicates().tolist()  # already largest first
+    totals = df[["country", "total"]].drop_duplicates()
+    longest = totals["total"].max()
+
+    x = alt.X("deaths:Q", stack=True, axis=None, scale=alt.Scale(domain=[0, longest * 1.18]))
+    y = alt.Y("country:N", sort=countries, axis=alt.Axis(title=None, labelLimit=220, ticks=False))
+    tooltip = [alt.Tooltip("country:N", title="Country"),
+               alt.Tooltip("violence_type:N", title="Type"),
+               alt.Tooltip("deaths:Q", title="Deaths", format=","),
+               alt.Tooltip("total:Q", title="Country total", format=",")]
+
+    bars = alt.Chart(df).mark_bar(size=18).encode(
+        x=x, y=y, color=type_colour(df), order=alt.Order("stack_order:Q"), tooltip=tooltip)
+    values = alt.Chart(totals).mark_text(align="left", dx=6).encode(
+        x=alt.X("total:Q", scale=alt.Scale(domain=[0, longest * 1.18])), y=y,
+        text=alt.Text("total:Q", format=","))
+    return (bars + values).properties(height=alt.Step(30))
+
+
+def top_countries_type_table(df: pd.DataFrame) -> pd.DataFrame:
+    """The same numbers as the top-countries type chart, one row per country."""
+    shown = [name for name in config.VIOLENCE_TYPES.values() if name in set(df["violence_type"])]
+    order = df["country"].drop_duplicates().tolist()
+    table = df.pivot(index="country", columns="violence_type", values="deaths")
+    table = table.reindex(index=order, columns=shown).fillna(0).astype(int)
+    table["Total"] = table.sum(axis=1)
+    return table.reset_index()
+
+
+def type_table(df: pd.DataFrame) -> pd.DataFrame:
+    """The same numbers as the type chart, one row per year and one column per type."""
+    shown = [name for name in config.VIOLENCE_TYPES.values() if name in set(df["violence_type"])]
+    table = df.pivot(index="year", columns="violence_type", values="deaths")
+    return table.reindex(columns=shown).fillna(0).astype(int).reset_index()
+
+
 # --- Page ---------------------------------------------------------------------
 
 st.set_page_config(page_title="Conflict Risk Monitor", layout="wide")
@@ -128,6 +215,25 @@ if (trend["is_preliminary"] == 1).any():
     st.caption("The hollow grey dot is preliminary data covering only part of a year. "
                "It is not comparable with full years.")
 
+# Global split by type of violence.
+has_types = analysis.has_type_data(con)
+TYPE_NOTE = (
+    f"Source: UCDP via [Our World in Data]({config.TYPE_SOURCE_PAGE}). "
+    "The split by type is not yet published for the preliminary year. "
+    "What each type means is explained under *About the data and its limits* at the bottom."
+)
+if has_types:
+    world_types = analysis.deaths_by_type(con)
+    st.subheader(f"Deaths worldwide by type of violence, "
+                 f"{world_types['year'].min()} to {world_types['year'].max()}")
+    st.altair_chart(type_chart(world_types, full_years), width="stretch")
+    st.caption(TYPE_NOTE)
+    with st.expander("Show the numbers by type as a table"):
+        st.dataframe(type_table(world_types), hide_index=True)
+else:
+    st.warning("The split by type of violence has not been loaded yet. "
+               "Run `python run_pipeline.py` to add it.")
+
 # Top countries and watchlist, side by side.
 left, right = st.columns(2)
 with left:
@@ -161,6 +267,16 @@ with right:
             },
         )
 
+# The same top ten countries, split by type of violence.
+if has_types and not top.empty:
+    top_by_type = analysis.top_countries_by_type(con, year, n=10)
+    st.subheader(f"Ten countries with the most deaths, by type of violence, {year}")
+    st.altair_chart(top_countries_type_chart(top_by_type), width="stretch")
+    st.caption(f"The same countries as the chart above. The number is each country's total for "
+               f"{year}; hover over a segment for its figure. " + TYPE_NOTE)
+    with st.expander("Show the numbers by type as a table"):
+        st.dataframe(top_countries_type_table(top_by_type), hide_index=True)
+
 # One country in detail.
 st.subheader("Country brief")
 countries = analysis.list_countries(con)
@@ -175,6 +291,17 @@ st.altair_chart(trend_chart(country_data), width="stretch")
 with st.expander("Show the numbers as a table"):
     st.dataframe(country_data, hide_index=True)
 
+if has_types:
+    country_types = analysis.deaths_by_type(con, country)
+    st.markdown(f"**Deaths in {country} by type of violence**")
+    if country_types.empty:
+        st.write("No deaths recorded by type for this country.")
+    else:
+        st.altair_chart(type_chart(country_types, full_years), width="stretch")
+        st.caption(TYPE_NOTE)
+        with st.expander("Show the numbers by type as a table"):
+            st.dataframe(type_table(country_types), hide_index=True)
+
 with st.expander("About the data and its limits"):
     st.markdown(
         """
@@ -187,6 +314,18 @@ with st.expander("About the data and its limits"):
   left out of comparisons.
 - **The watchlist** compares a country with its own recent past. It describes what has
   happened; it does not predict what will.
+- **Types of violence** (UCDP's categories):
+  - *Fighting between states*: two or more governments fighting each other (interstate).
+  - *Civil conflict*: a government against a rebel or other armed group (intrastate).
+    Foreign states may support either side.
+  - *Fighting between armed groups*: armed groups fighting each other, with no government
+    as a side (non-state).
+  - *Violence against civilians*: a government or armed group using armed force against
+    unarmed civilians (one-sided violence).
+  - *Colonial or extrasystemic conflict*: a state fighting a group outside its own territory.
+    None has been recorded since 1989.
+- **Type tells you what kind of violence, not why it started.** The causes of a conflict
+  need other sources and an analyst's judgement.
         """
     )
 

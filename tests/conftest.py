@@ -1,6 +1,6 @@
 """Shared set-up for the tests.
 
-The tests never touch the internet. They run on a tiny sample file with
+The tests never touch the internet. They run on tiny sample files with
 fictional countries and invented numbers, so every expected answer can be
 worked out by hand.
 """
@@ -13,7 +13,9 @@ import pytest
 
 from conflict_monitor import transform
 
-SAMPLE_FILE = Path(__file__).parent / "fixtures" / "sample_conflict_deaths.csv"
+FIXTURES = Path(__file__).parent / "fixtures"
+SAMPLE_FILE = FIXTURES / "sample_conflict_deaths.csv"
+SAMPLE_TYPE_FILE = FIXTURES / "sample_conflict_deaths_by_type.csv"
 
 
 @pytest.fixture
@@ -23,10 +25,17 @@ def raw() -> pd.DataFrame:
 
 
 @pytest.fixture
-def con(raw, tmp_path):
-    """A temporary database built from the sample file."""
+def raw_by_type() -> pd.DataFrame:
+    """The sample file split by type of violence. Its types add up to the totals in `raw`."""
+    return pd.read_csv(SAMPLE_TYPE_FILE)
+
+
+@pytest.fixture
+def con(raw, raw_by_type, tmp_path):
+    """A temporary database built from both sample files."""
     db_path = tmp_path / "test.db"
     transform.load_to_sqlite(transform.clean(raw), db_path)
+    transform.load_to_sqlite(transform.clean_by_type(raw_by_type), db_path, table=transform.TYPE_TABLE)
     connection = sqlite3.connect(db_path)
     yield connection
     connection.close()

@@ -39,6 +39,24 @@ def test_download_saves_file_and_records_where_it_came_from(raw_folder, monkeypa
     assert len(metadata["sha256"]) == 64
 
 
+def test_download_can_keep_a_separate_record(raw_folder, monkeypatch):
+    """The second file's record must not overwrite the first file's."""
+    monkeypatch.setattr(ingest.requests, "get", lambda *args, **kwargs: FakeResponse())
+    record = raw_folder / "download_metadata_by_type.json"
+
+    ingest.download(
+        url="https://example.org/by_type.csv",
+        dest=raw_folder / "by_type.csv",
+        metadata_file=record,
+        source_page="https://example.org/by-type-page",
+    )
+
+    metadata = json.loads(record.read_text())
+    assert metadata["origin"] == "https://example.org/by_type.csv"
+    assert metadata["source_page"] == "https://example.org/by-type-page"
+    assert not (raw_folder / "download_metadata.json").exists()  # the usual record is untouched
+
+
 def test_use_local_file_copies_it_into_place(raw_folder, tmp_path):
     source = tmp_path / "my_download.csv"
     source.write_text("Entity,Code,Year,Deaths\n")

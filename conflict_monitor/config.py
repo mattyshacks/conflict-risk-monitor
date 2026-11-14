@@ -21,6 +21,23 @@ DATA_URL = (
     "?v=1&csvType=full&useColumnShortNames=false"
 )
 
+# The same deaths, split by type of violence. Built from the same UCDP events
+# and assigned to countries the same way, so the types add up to the total above.
+TYPE_SOURCE_PAGE = "https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-type"
+TYPE_DATA_URL = TYPE_SOURCE_PAGE + ".csv?v=1&csvType=full&useColumnShortNames=false"
+RAW_TYPE_FILE = RAW_DIR / "deaths_in_armed_conflicts_by_type.csv"
+RAW_TYPE_METADATA_FILE = RAW_DIR / "download_metadata_by_type.json"
+
+# Column name in the raw file -> plain-English name shown to readers.
+# This order is the order used in charts, and each type keeps its colour.
+VIOLENCE_TYPES = {
+    "Interstate": "Fighting between states",
+    "Intrastate": "Civil conflict",
+    "Non-state": "Fighting between armed groups",
+    "One-sided violence": "Violence against civilians",
+    "Extrasystemic": "Colonial or extrasystemic conflict",
+}
+
 # Data rules ----------------------------------------------------------------
 FIRST_YEAR = 1989
 # The last year with complete, final figures. Anything later is preliminary

@@ -53,6 +53,29 @@ def test_clean_rejects_file_with_wrong_columns(raw):
         transform.clean(raw.rename(columns={"Entity": "Place"}))
 
 
+def test_clean_by_type_gives_one_row_per_type(raw_by_type):
+    clean = transform.clean_by_type(raw_by_type)
+    assert list(clean.columns) == [
+        "entity", "code", "year", "violence_type", "deaths", "entity_type", "is_preliminary",
+    ]
+    assert len(clean) == len(raw_by_type) * 5  # five types for every place and year
+    assert set(clean["violence_type"]) == {
+        "Fighting between states", "Civil conflict", "Fighting between armed groups",
+        "Violence against civilians", "Colonial or extrasystemic conflict",
+    }
+
+
+def test_clean_by_type_rejects_file_missing_a_type(raw_by_type):
+    with pytest.raises(DataQualityError, match="missing column"):
+        transform.clean_by_type(raw_by_type.drop(columns=["Interstate"]))
+
+
+def test_clean_by_type_rejects_negative_deaths(raw_by_type):
+    raw_by_type.loc[0, "Intrastate"] = -5
+    with pytest.raises(DataQualityError, match="negative"):
+        transform.clean_by_type(raw_by_type)
+
+
 def test_load_to_sqlite_writes_every_row(raw, tmp_path):
     clean = transform.clean(raw)
     db_path = tmp_path / "test.db"

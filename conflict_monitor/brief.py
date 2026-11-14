@@ -13,7 +13,7 @@ single source of truth.
 
 import sqlite3
 
-from . import config
+from . import analysis, config
 
 SOURCE_NOTE = (
     "Source: UCDP via Our World in Data (best estimates). "
@@ -60,6 +60,17 @@ def country_facts(
             (year, deaths),
         ).fetchone()[0]
 
+    # Which type of violence caused the most deaths that year, and what share?
+    main_type, main_type_deaths, type_total = None, None, None
+    if deaths and analysis.has_type_data(con):
+        types = analysis.deaths_by_type(con, country)
+        types = types[types["year"] == year]
+        if not types.empty:
+            biggest = types.loc[types["deaths"].idxmax()]
+            main_type = biggest["violence_type"]
+            main_type_deaths = int(biggest["deaths"])
+            type_total = int(types["deaths"].sum())
+
     return {
         "country": country,
         "year": year,
@@ -74,6 +85,9 @@ def country_facts(
         "first_year": min(full_years) if full_years else None,
         "preliminary_year": max(preliminary) if preliminary else None,
         "preliminary_deaths": preliminary[max(preliminary)] if preliminary else None,
+        "main_violence_type": main_type,
+        "main_violence_type_deaths": main_type_deaths,
+        "violence_type_total": type_total,
     }
 
 
@@ -88,6 +102,21 @@ def _change_phrase(current: int, previous: int | None) -> str:
         return ", about the same as the year before"
     direction = "up" if change > 0 else "down"
     return f", {direction} {abs(change):.0f}% on the year before ({previous:,})"
+
+
+def _type_phrase(main_type: str | None, main_deaths: int | None, total: int | None) -> str:
+    """Describe the main type of violence in words, e.g. 'Most of these deaths (80%) were from ...'."""
+    if not main_type or not total:
+        return ""
+    name = main_type[0].lower() + main_type[1:]  # "Civil conflict" -> "civil conflict"
+    if main_deaths == total:
+        return f"All of these deaths were from {name}."
+    share = main_deaths / total * 100
+    if share >= 99.5:  # would round to "100%", which is not quite true
+        return f"Almost all of these deaths (over 99%) were from {name}."
+    if share > 50:
+        return f"Most of these deaths ({share:.0f}%) were from {name}."
+    return f"The largest share ({share:.0f}%) was from {name}."
 
 
 def render_brief(facts: dict) -> str:
@@ -108,6 +137,13 @@ def render_brief(facts: dict) -> str:
         if facts["rank"]:
             headline += f", ranking {_ordinal(facts['rank'])} worldwide"
         sentences.append(headline + ".")
+
+    # Sentence 1b: what kind of violence caused most of them.
+    type_sentence = _type_phrase(
+        facts["main_violence_type"], facts["main_violence_type_deaths"], facts["violence_type_total"]
+    )
+    if type_sentence:
+        sentences.append(type_sentence)
 
     # Sentence 2: compared with its own recent history.
     baseline = facts["baseline_avg"]
