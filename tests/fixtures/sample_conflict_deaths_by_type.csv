@@ -1,0 +1,49 @@
+Entity,Code,Year,One-sided violence,Non-state,Extrasystemic,Intrastate,Interstate
+Northland,NTH,2018,200,0,0,800,0
+Northland,NTH,2019,200,0,0,800,0
+Northland,NTH,2020,200,0,0,800,0
+Northland,NTH,2021,200,0,0,800,0
+Northland,NTH,2022,200,0,0,800,0
+Northland,NTH,2023,200,0,0,800,0
+Northland,NTH,2024,200,0,0,800,0
+Northland,NTH,2025,200,0,0,900,0
+Southland,STH,2018,0,100,0,0,0
+Southland,STH,2019,0,100,0,0,0
+Southland,STH,2020,0,100,0,0,0
+Southland,STH,2021,0,100,0,0,0
+Southland,STH,2022,0,100,0,0,0
+Southland,STH,2023,0,100,0,0,0
+Southland,STH,2024,0,100,0,0,0
+Southland,STH,2025,0,100,0,0,400
+Eastland,EST,2018,0,0,0,0,0
+Eastland,EST,2019,0,0,0,0,0
+Eastland,EST,2020,0,0,0,0,0
+Eastland,EST,2021,0,0,0,0,0
+Eastland,EST,2022,0,0,0,0,0
+Eastland,EST,2023,0,0,0,0,0
+Eastland,EST,2024,0,0,0,0,0
+Eastland,EST,2025,300,0,0,0,0
+Westland,WST,2018,0,5,0,5,0
+Westland,WST,2019,0,5,0,5,0
+Westland,WST,2020,0,5,0,5,0
+Westland,WST,2021,0,5,0,5,0
+Westland,WST,2022,0,5,0,5,0
+Westland,WST,2023,0,5,0,5,0
+Westland,WST,2024,0,5,0,5,0
+Westland,WST,2025,10,14,0,16,0
+Northern Region,,2018,200,5,0,805,0
+World,OWID_WRL,2018,200,105,0,805,0
+Northern Region,,2019,200,5,0,805,0
+World,OWID_WRL,2019,200,105,0,805,0
+Northern Region,,2020,200,5,0,805,0
+World,OWID_WRL,2020,200,105,0,805,0
+Northern Region,,2021,200,5,0,805,0
+World,OWID_WRL,2021,200,105,0,805,0
+Northern Region,,2022,200,5,0,805,0
+World,OWID_WRL,2022,200,105,0,805,0
+Northern Region,,2023,200,5,0,805,0
+World,OWID_WRL,2023,200,105,0,805,0
+Northern Region,,2024,200,5,0,805,0
+World,OWID_WRL,2024,200,105,0,805,0
+Northern Region,,2025,210,14,0,916,0
+World,OWID_WRL,2025,510,114,0,916,400

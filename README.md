@@ -8,6 +8,7 @@ It is a learning project. The aim was to build one data product end to end: coll
 
 - **Pipeline.** Downloads the latest figures, checks them against a set of data quality rules, and loads them into a SQL database. One command.
 - **Dashboard.** Shows the worldwide trend, the ten most affected countries in a chosen year, and a trend for any country.
+- **Type of violence.** Splits deaths, worldwide and for each country, into fighting between states, civil conflict, fighting between armed groups, and violence against civilians.
 - **Escalation watchlist.** Lists countries whose deaths in a year are well above their own five-year average. The thresholds can be changed on screen.
 - **Country brief.** Writes a short paragraph for any country, built only from figures in the database and marked as a draft for analyst review.
 
@@ -15,8 +16,8 @@ It is a learning project. The aim was to build one data product end to end: coll
 
 ```mermaid
 flowchart LR
-    A["Our World in Data CSV<br/>(UCDP figures)"] -->|ingest.py| B["data/raw<br/>+ download record"]
-    B -->|"transform.py<br/>clean and check"| C[("SQLite table<br/>conflict_deaths")]
+    A["Our World in Data CSVs<br/>(UCDP figures: totals,<br/>and split by type)"] -->|ingest.py| B["data/raw<br/>+ download records"]
+    B -->|"transform.py<br/>clean and check"| C[("SQLite tables<br/>conflict_deaths<br/>conflict_deaths_by_type")]
     C -->|"analysis.py<br/>SQL questions"| D["Dashboard<br/>app.py"]
     C -->|"brief.py<br/>facts to text"| D
 ```
@@ -52,16 +53,18 @@ pytest                     # run the tests
 streamlit run app.py       # open the dashboard
 ```
 
-If the download is blocked on your network, open the [source page](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-country), download the full CSV by hand, and run:
+If the download is blocked on your network, download the full CSV by hand from both source pages, [totals](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-country) and [split by type](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-type), and run:
 
 ```bash
-python run_pipeline.py --source path/to/downloaded.csv
+python run_pipeline.py --source path/to/totals.csv --type-source path/to/by_type.csv
 ```
 
-To see the dashboard without any real data, use the fictional sample file:
+The two options must be used together, so the database never mixes two different releases.
+
+To see the dashboard without any real data, use the fictional sample files:
 
 ```bash
-python run_pipeline.py --source tests/fixtures/sample_conflict_deaths.csv
+python run_pipeline.py --source tests/fixtures/sample_conflict_deaths.csv --type-source tests/fixtures/sample_conflict_deaths_by_type.csv
 ```
 
 ## The data
@@ -76,7 +79,9 @@ python run_pipeline.py --source tests/fixtures/sample_conflict_deaths.csv
 - These are UCDP's "best" estimates. UCDP also publishes low and high estimates, which this project does not use.
 - The most recent year is preliminary and covers only part of the year. The pipeline flags it and leaves it out of every comparison.
 
-**Provenance.** Each download writes `data/raw/download_metadata.json` with the URL, the time, and a fingerprint (SHA-256) of the file. The dashboard shows the retrieval date.
+**Split by type of violence.** A second file, [Deaths in armed conflicts by type](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-type), from the same publisher, splits the same deaths into UCDP's five types: interstate (between states), intrastate (civil conflict), non-state (between armed groups), one-sided violence (against civilians) and extrasystemic (none since 1989). It is built from the same UCDP events and assigns them to countries the same way, so the pipeline checks that the five types add up exactly to the total for every place and year. It is published for full years only, so there is no split for the preliminary year. The type says what kind of violence it was, not why a conflict started.
+
+**Provenance.** Each download writes a record in `data/raw/` (`download_metadata.json` for the totals, `download_metadata_by_type.json` for the split by type) with the URL, the time, and a fingerprint (SHA-256) of the file. The dashboard shows the retrieval date.
 
 **Licence.** Our World in Data's own work is CC BY 4.0. The underlying data belongs to UCDP and is subject to UCDP's terms, which should be checked before any commercial use. Cite: Davies, Pettersson and Öberg (2026), "Organized violence 1989–2025, and violent political protests", *Journal of Peace Research*. The data itself is not stored in this repository.
 
@@ -85,7 +90,7 @@ python run_pipeline.py --source tests/fixtures/sample_conflict_deaths.csv
 ## Design decisions
 
 - **Stop on bad data.** If the file has negative counts, duplicate rows or missing columns, the pipeline raises an error and loads nothing. A dashboard that is down is better than one that is wrong.
-- **Cross-check against the source.** After loading, the pipeline compares its own country totals with the source's World figure and reports the largest gap.
+- **Cross-check against the source.** After loading, the pipeline compares its own country totals with the source's World figure and reports the largest gap. It also checks that the types of violence add up to the totals.
 - **Questions live in SQL, away from the screen.** `analysis.py` can be tested on its own and reused by another tool.
 - **Tests never use the internet.** They run on a small invented sample, so every expected answer can be worked out by hand and the tests give the same result every time.
 - **SQLite for storage.** It ships with Python, needs no server, and uses standard SQL, so moving to a bigger database later changes the connection and not the queries.

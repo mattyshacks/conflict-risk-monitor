@@ -6,6 +6,9 @@ The raw file has one row per place per year. This step:
   3. flags preliminary years
   4. refuses to continue if the data breaks a basic rule
   5. writes the result to a database table
+
+It does this for two files: the totals (table conflict_deaths) and the same
+deaths split by type of violence (table conflict_deaths_by_type).
 """
 
 import sqlite3
@@ -16,6 +19,7 @@ import pandas as pd
 from . import config
 
 TABLE = "conflict_deaths"
+TYPE_TABLE = "conflict_deaths_by_type"
 
 
 class DataQualityError(ValueError):
@@ -61,6 +65,38 @@ def clean(raw: pd.DataFrame, last_full_year: int = config.LAST_FULL_YEAR) -> pd.
         columns={"Entity": "entity", "Code": "code", "Year": "year", deaths_column: "deaths"}
     )[["entity", "code", "year", "deaths"]]
 
+    # --- 3 to 5. Tidy, check the rules, add labels ---
+    return _tidy_check_and_label(df, ["entity", "year"], last_full_year)
+
+
+def clean_by_type(raw: pd.DataFrame, last_full_year: int = config.LAST_FULL_YEAR) -> pd.DataFrame:
+    """Turn the raw by-type table into a tidy, validated one: one row per place, year and type."""
+    # --- 1. Check the shape we expect: Entity, Code, Year and one column per type ---
+    expected = ["Entity", "Code", "Year", *config.VIOLENCE_TYPES]
+    missing = [name for name in expected if name not in raw.columns]
+    if missing:
+        raise DataQualityError(
+            f"Raw file is missing column(s) {missing}. Found: {list(raw.columns)}"
+        )
+
+    # --- 2. One row per type instead of one column per type ---
+    # This is called "long" format. It makes adding up and charting by type simple.
+    df = raw.rename(columns={"Entity": "entity", "Code": "code", "Year": "year"}).melt(
+        id_vars=["entity", "code", "year"],
+        value_vars=list(config.VIOLENCE_TYPES),
+        var_name="violence_type",
+        value_name="deaths",
+    )
+    df["violence_type"] = df["violence_type"].map(config.VIOLENCE_TYPES)  # plain-English names
+
+    # --- 3 to 5. Tidy, check the rules, add labels ---
+    return _tidy_check_and_label(df, ["entity", "year", "violence_type"], last_full_year)
+
+
+def _tidy_check_and_label(
+    df: pd.DataFrame, key_columns: list[str], last_full_year: int
+) -> pd.DataFrame:
+    """Shared by both tables. `key_columns` are the columns that must be unique together."""
     # --- 3. Tidy values ---
     df = df.dropna(subset=["deaths"]).copy()  # a missing figure is not the same as zero
     df["year"] = df["year"].astype(int)
@@ -73,27 +109,29 @@ def clean(raw: pd.DataFrame, last_full_year: int = config.LAST_FULL_YEAR) -> pd.
         raise DataQualityError("Found negative death counts.")
     if (df["year"] < config.FIRST_YEAR).any():
         raise DataQualityError(f"Found years before {config.FIRST_YEAR}.")
-    duplicates = df.duplicated(subset=["entity", "year"])
+    duplicates = df.duplicated(subset=key_columns)
     if duplicates.any():
-        examples = df.loc[duplicates, ["entity", "year"]].head(3).to_dict("records")
-        raise DataQualityError(f"Same place and year appears twice, e.g. {examples}")
+        examples = df.loc[duplicates, key_columns].head(3).to_dict("records")
+        raise DataQualityError(
+            f"The same {' + '.join(key_columns)} appears twice, e.g. {examples}"
+        )
 
     # --- 5. Add the labels the analysis needs ---
     df["entity_type"] = df["code"].map(_entity_type)
     df["is_preliminary"] = (df["year"] > last_full_year).astype(int)
 
-    return df.sort_values(["entity", "year"]).reset_index(drop=True)
+    return df.sort_values(key_columns).reset_index(drop=True)
 
 
-def load_to_sqlite(df: pd.DataFrame, db_path: Path = config.DB_PATH) -> int:
-    """Write the clean table to SQLite, replacing any previous version. Returns the row count."""
+def load_to_sqlite(df: pd.DataFrame, db_path: Path = config.DB_PATH, table: str = TABLE) -> int:
+    """Write a clean table to SQLite, replacing any previous version. Returns the row count."""
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(db_path)
     try:
-        df.to_sql(TABLE, con, if_exists="replace", index=False)
+        df.to_sql(table, con, if_exists="replace", index=False)
         # An index makes "all years for one country" lookups fast.
-        con.execute(f"CREATE INDEX IF NOT EXISTS idx_entity_year ON {TABLE} (entity, year)")
+        con.execute(f"CREATE INDEX IF NOT EXISTS idx_{table} ON {table} (entity, year)")
         con.commit()
     finally:
         con.close()

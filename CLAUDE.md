@@ -13,7 +13,7 @@ I am learning. When you change something, explain what you changed and why in pl
 ## Commands
 
 - Build the database: `python run_pipeline.py`
-- Build from the fictional sample (no internet): `python run_pipeline.py --source tests/fixtures/sample_conflict_deaths.csv`
+- Build from the fictional sample (no internet): `python run_pipeline.py --source tests/fixtures/sample_conflict_deaths.csv --type-source tests/fixtures/sample_conflict_deaths_by_type.csv`
 - Run the tests: `pytest`
 - Start the dashboard: `streamlit run app.py`
 
