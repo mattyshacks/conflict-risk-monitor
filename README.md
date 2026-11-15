@@ -112,6 +112,9 @@ How each part would map onto a Microsoft data stack. This is my reading of the d
 
 ## Roadmap
 
+- [x] Deaths split by type of violence: between states, civil conflict, between armed groups, against civilians
+- [ ] Who was fighting whom: UCDP's conflict names and sides for each country and year, to get closer to why deaths happened
+- [ ] Recent headlines for the preliminary year, shown as clearly labelled links and kept out of the generated brief
 - [ ] Brief written by a language model, grounded in `country_facts()`, with the template kept as a fallback
 - [ ] Deaths per 100,000 people, by joining a population dataset
 - [ ] Region filter
