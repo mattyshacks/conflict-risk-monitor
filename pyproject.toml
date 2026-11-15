@@ -1,0 +1,14 @@
+# Settings for Ruff, the code checker (https://docs.astral.sh/ruff/).
+# Run it with the Ruff extension in VS Code, or with `ruff check .` if Ruff is installed.
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Ruff's default checks (likely bugs and unused code), plus "I": imports kept in tidy groups.
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.isort]
+# conflict_monitor is this project's own code. Saying so means Ruff groups it
+# correctly even when VS Code is opened on a parent folder.
+known-first-party = ["conflict_monitor"]
