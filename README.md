@@ -67,6 +67,35 @@ To see the dashboard without any real data, use the fictional sample files:
 python run_pipeline.py --source tests/fixtures/sample_conflict_deaths.csv --type-source tests/fixtures/sample_conflict_deaths_by_type.csv
 ```
 
+### Viewing the dashboard on other devices
+
+By default the dashboard is at `http://localhost:8501` on the computer running it. To open it from a phone or another computer on the same network:
+
+1. Start it so it listens on the network, not only on this computer:
+
+   ```bash
+   streamlit run app.py --server.address 0.0.0.0
+   ```
+
+2. On Windows, the firewall blocks this until you allow it:
+   - Set the network to **Private** (Settings → Network & Internet → your connection). Do this only on a network you trust, such as your home network.
+   - Allow port 8501 on Private networks only. In a Command Prompt run as administrator, paste this as one line:
+
+     ```bat
+     netsh advfirewall firewall add rule name="Conflict Risk Monitor dashboard" dir=in action=allow protocol=TCP localport=8501 profile=private
+     ```
+
+     To remove it later: `netsh advfirewall firewall delete rule name="Conflict Risk Monitor dashboard"`.
+
+3. Find this computer's address with `ipconfig` (the "IPv4 Address", such as `192.168.0.20`), and open `http://<that address>:8501` on the other device.
+
+Notes:
+
+- The other device must be on the same network. Guest Wi-Fi networks usually stop devices reaching each other.
+- There is no login, so anyone on that network can open the dashboard. The data is public, but only do this on a network you trust.
+- The dashboard runs only while the terminal that started it is open. Press `Ctrl+C` in that terminal to stop it. Run only one copy at a time.
+- The address can change after the computer or router restarts. If the link stops working, check `ipconfig` again.
+
 ## The data
 
 **Source.** [Deaths in armed conflicts based on where they occurred](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-country), published by Our World in Data from the Uppsala Conflict Data Program (UCDP). At the time of writing the source page cites the UCDP Georeferenced Event Dataset v26.1, plus UCDP Candidate Events data for the preliminary year.
