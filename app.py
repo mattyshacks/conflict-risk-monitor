@@ -171,6 +171,16 @@ try:
 except FileNotFoundError as error:
     st.error(str(error))
     st.stop()
+if not analysis.has_table(con, "country_regions"):
+    st.error("This database was built by an older version of the pipeline. "
+             "Run `python run_pipeline.py` to update it.")
+    st.stop()
+
+
+def region_label(region: str) -> str:
+    """'Africa (UCDP)' -> 'Africa'."""
+    return region.removesuffix(" (UCDP)")
+
 
 trend = analysis.global_trend(con)
 full_years = trend.loc[trend["is_preliminary"] == 0, "year"].tolist()
@@ -186,15 +196,25 @@ st.caption(
 )
 
 # Filters, in one row above everything they control.
-filter_year, filter_ratio, filter_min = st.columns(3)
+filter_region, filter_year, filter_ratio, filter_min = st.columns(4)
+# None means "all regions".
+region = filter_region.selectbox(
+    "Region", [None] + analysis.list_regions(con),
+    format_func=lambda r: "All regions" if r is None else region_label(r))
 year = filter_year.selectbox("Year", sorted(full_years, reverse=True), index=0)
 ratio = filter_ratio.slider(
     "Watchlist: times above own 5-year average", 1.5, 10.0, config.WATCHLIST_RATIO, 0.5)
 min_deaths = filter_min.slider(
     "Watchlist: minimum deaths in the year", 25, 1000, config.WATCHLIST_MIN_DEATHS, 25)
+# Added to titles, e.g. " in Africa" or " in the Middle East"; empty for all regions.
+where = ""
+if region:
+    the = "the " if region_label(region) in ("Americas", "Middle East") else ""
+    where = f" in {the}{region_label(region)}"
 
-top = analysis.top_countries(con, year, n=10)
-watchlist = analysis.escalation_watchlist(con, year, ratio=ratio, min_deaths=min_deaths)
+top = analysis.top_countries(con, year, n=10, region=region)
+watchlist = analysis.escalation_watchlist(
+    con, year, ratio=ratio, min_deaths=min_deaths, region=region)
 
 # Headline numbers.
 deaths_by_year = trend.set_index("year")["deaths"]
@@ -206,7 +226,7 @@ tile_total.metric(f"Deaths worldwide, {year}", f"{this_year:,}")
 if previous_year:
     change = (this_year - previous_year) / previous_year * 100
     tile_change.metric(f"Change on {year - 1}", f"{change:+.0f}%")
-tile_watch.metric("Countries on the watchlist", len(watchlist))
+tile_watch.metric(f"Countries on the watchlist{where}", len(watchlist))
 
 # Global trend.
 st.subheader(f"Deaths worldwide per year, {min(full_years)} to {latest_full_year}")
@@ -237,13 +257,13 @@ else:
 # Top countries and watchlist, side by side.
 left, right = st.columns(2)
 with left:
-    st.subheader(f"Ten countries with the most deaths, {year}")
+    st.subheader(f"Ten countries with the most deaths{where}, {year}")
     if top.empty:
-        st.write("No deaths recorded for this year.")
+        st.write(f"No deaths recorded{where} for this year.")
     else:
         st.altair_chart(ranked_bars(top), width="stretch")
 with right:
-    st.subheader(f"Escalation watchlist, {year}")
+    st.subheader(f"Escalation watchlist{where}, {year}")
     st.caption(
         f"Countries with at least {min_deaths} deaths and at least {ratio:g} times their own "
         f"average for {year - config.BASELINE_YEARS} to {year - 1}. "
@@ -269,8 +289,8 @@ with right:
 
 # The same top ten countries, split by type of violence.
 if has_types and not top.empty:
-    top_by_type = analysis.top_countries_by_type(con, year, n=10)
-    st.subheader(f"Ten countries with the most deaths, by type of violence, {year}")
+    top_by_type = analysis.top_countries_by_type(con, year, n=10, region=region)
+    st.subheader(f"Ten countries with the most deaths{where}, by type of violence, {year}")
     st.altair_chart(top_countries_type_chart(top_by_type), width="stretch")
     st.caption(f"The same countries as the chart above. The number is each country's total for "
                f"{year}; hover over a segment for its figure. " + TYPE_NOTE)
@@ -279,9 +299,9 @@ if has_types and not top.empty:
 
 # One country in detail.
 st.subheader("Country brief")
-countries = analysis.list_countries(con)
-# Start on the country with the most deaths in the latest full year.
-latest_top = analysis.top_countries(con, latest_full_year, n=1)
+countries = analysis.list_countries(con, region=region)
+# Start on the country with the most deaths in the latest full year (in the chosen region).
+latest_top = analysis.top_countries(con, latest_full_year, n=1, region=region)
 default_country = latest_top["country"].iloc[0] if not latest_top.empty else countries[0]
 country = st.selectbox("Country", countries, index=countries.index(default_country))
 
@@ -324,6 +344,10 @@ with st.expander("About the data and its limits"):
     unarmed civilians (one-sided violence).
   - *Colonial or extrasystemic conflict*: a state fighting a group outside its own territory.
     None has been recorded since 1989.
+- **Regions** are UCDP's five regions, from Our World in Data's list of which country is in
+  which. Palestine, Abyei and Western Sahara are missing from that list, so they were placed
+  by hand: Palestine in the Middle East, the other two in Africa. UCDP's own region totals
+  differ slightly in a few years because UCDP files some conflicts under a neighbouring region.
 - **Type tells you what kind of violence, not why it started.** The causes of a conflict
   need other sources and an analyst's judgement.
         """

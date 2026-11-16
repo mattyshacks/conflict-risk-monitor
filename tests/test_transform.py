@@ -91,6 +91,47 @@ def test_clean_by_type_rejects_negative_deaths(raw_by_type):
         transform.clean_by_type(raw_by_type)
 
 
+def _without_eastland(raw_regions):
+    """The sample region list with Eastland taken out, as the real list leaves out Palestine."""
+    return raw_regions[raw_regions["Entity"] != "Eastland"]
+
+
+def test_clean_regions_adds_places_placed_by_hand(raw_regions):
+    regions = transform.clean_regions(
+        _without_eastland(raw_regions), extra={"Eastland": "Southern Region (UCDP)"}
+    )
+    assert dict(zip(regions["entity"], regions["region"])) == {
+        "Eastland": "Southern Region (UCDP)",
+        "Northland": "Northern Region (UCDP)",
+        "Southland": "Southern Region (UCDP)",
+        "Westland": "Northern Region (UCDP)",
+    }
+
+
+def test_clean_regions_keeps_the_sources_own_entry(raw_regions):
+    """If the source lists a place we also placed by hand, the source wins."""
+    regions = transform.clean_regions(raw_regions, extra={"Northland": "Southern Region (UCDP)"})
+    northland = regions.loc[regions["entity"] == "Northland", "region"].tolist()
+    assert northland == ["Northern Region (UCDP)"]
+
+
+def test_clean_regions_rejects_a_place_listed_twice(raw_regions):
+    doubled = pd.concat([raw_regions, raw_regions.head(1)], ignore_index=True)
+    with pytest.raises(DataQualityError, match="twice"):
+        transform.clean_regions(doubled, extra={})
+
+
+def test_pipeline_stops_if_a_place_with_deaths_has_no_region(raw, raw_regions):
+    regions = transform.clean_regions(_without_eastland(raw_regions), extra={})
+    with pytest.raises(DataQualityError, match="Eastland"):
+        transform.check_every_place_has_region(transform.clean(raw), regions)
+
+
+def test_pipeline_continues_when_every_place_has_a_region(raw, raw_regions):
+    regions = transform.clean_regions(raw_regions, extra={})
+    transform.check_every_place_has_region(transform.clean(raw), regions)  # no error
+
+
 def test_load_to_sqlite_writes_every_row(raw, tmp_path):
     clean = transform.clean(raw)
     db_path = tmp_path / "test.db"

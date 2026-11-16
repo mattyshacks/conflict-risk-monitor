@@ -28,6 +28,22 @@ TYPE_DATA_URL = TYPE_SOURCE_PAGE + ".csv?v=1&csvType=full&useColumnShortNames=fa
 RAW_TYPE_FILE = RAW_DIR / "deaths_in_armed_conflicts_by_type.csv"
 RAW_TYPE_METADATA_FILE = RAW_DIR / "download_metadata_by_type.json"
 
+# Which UCDP region each country belongs to (Africa, Americas, Asia and Oceania,
+# Europe, Middle East). Used for the region filter.
+REGION_SOURCE_PAGE = "https://ourworldindata.org/grapher/world-regions-according-to-ucdp"
+REGION_DATA_URL = REGION_SOURCE_PAGE + ".csv?v=1&csvType=full&useColumnShortNames=false"
+RAW_REGION_FILE = RAW_DIR / "world_regions_according_to_ucdp.csv"
+RAW_REGION_METADATA_FILE = RAW_DIR / "download_metadata_regions.json"
+
+# Places with recorded deaths that the region list leaves out, placed by hand.
+# Each goes where its neighbours are listed. The source's own entry wins if it
+# ever adds one of these.
+EXTRA_REGIONS = {
+    "Palestine": "Middle East (UCDP)",  # Israel is listed in the Middle East
+    "Abyei": "Africa (UCDP)",  # disputed between Sudan and South Sudan, both in Africa
+    "Western Sahara": "Africa (UCDP)",  # Morocco is listed in Africa
+}
+
 # Column name in the raw file -> plain-English name shown to readers.
 # This order is the order used in charts, and each type keeps its colour.
 VIOLENCE_TYPES = {

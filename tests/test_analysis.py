@@ -106,6 +106,39 @@ def test_top_countries_by_type_splits_the_top_countries(con):
     ]
 
 
+def test_list_regions(con):
+    assert analysis.list_regions(con) == ["Northern Region (UCDP)", "Southern Region (UCDP)"]
+
+
+def test_top_countries_within_a_region(con):
+    top = analysis.top_countries(con, year=2025, region="Northern Region (UCDP)")
+    assert top.values.tolist() == [["Northland", 1100], ["Westland", 40]]
+
+
+def test_list_countries_within_a_region(con):
+    assert analysis.list_countries(con, region="Southern Region (UCDP)") == ["Eastland", "Southland"]
+
+
+def test_watchlist_within_a_region(con):
+    south = analysis.escalation_watchlist(con, year=2025, region="Southern Region (UCDP)")
+    assert sorted(south["country"]) == ["Eastland", "Southland"]
+    north = analysis.escalation_watchlist(con, year=2025, region="Northern Region (UCDP)")
+    assert north.empty  # Northland is steady and Westland is too small
+
+
+def test_top_countries_by_type_within_a_region(con):
+    top = analysis.top_countries_by_type(con, year=2025, region="Southern Region (UCDP)")
+    assert top["country"].drop_duplicates().tolist() == ["Southland", "Eastland"]
+
+
+def test_region_check_matches_region_figure(con):
+    check = analysis.region_check(con)
+    # Only the northern region has its own figure in the sample: 2018 to 2026 is 9 years.
+    assert check["region"].unique().tolist() == ["Northern Region (UCDP)"]
+    assert len(check) == 9
+    assert (check["difference"] == 0).all()
+
+
 def test_type_check_finds_types_add_up(con):
     check = analysis.type_check(con)
     assert len(check) == 48  # 6 places (4 countries, the region, World) x 8 years
