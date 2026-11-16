@@ -31,11 +31,16 @@ def load_raw(path: Path = config.RAW_FILE) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def _entity_type(code) -> str:
-    """Countries have a 3-letter code (ZAF, UKR). World and regions do not."""
-    if isinstance(code, str) and (len(code) == 3 or code == "OWID_KOS"):  # Kosovo's code is special
-        return "country"
-    return "aggregate"
+def _entity_type(entity: str) -> str:
+    """Totals ("aggregate") are World and UCDP's regions, such as "Africa (UCDP)".
+
+    Every other row is a place. The name is used rather than the code because
+    some places have no standard 3-letter code: Abyei, a disputed area between
+    Sudan and South Sudan, has none, and Kosovo's is OWID_KOS.
+    """
+    if entity == "World" or entity.endswith("(UCDP)"):
+        return "aggregate"
+    return "country"
 
 
 def clean(raw: pd.DataFrame, last_full_year: int = config.LAST_FULL_YEAR) -> pd.DataFrame:
@@ -117,7 +122,7 @@ def _tidy_check_and_label(
         )
 
     # --- 5. Add the labels the analysis needs ---
-    df["entity_type"] = df["code"].map(_entity_type)
+    df["entity_type"] = df["entity"].map(_entity_type)
     df["is_preliminary"] = (df["year"] > last_full_year).astype(int)
 
     return df.sort_values(key_columns).reset_index(drop=True)

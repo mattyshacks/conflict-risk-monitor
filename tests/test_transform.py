@@ -20,8 +20,23 @@ def test_clean_separates_countries_from_aggregates(raw):
     clean = transform.clean(raw)
     types = clean.groupby("entity")["entity_type"].first()
     assert types["Northland"] == "country"
-    assert types["World"] == "aggregate"            # has a code, but not a country code
-    assert types["Northern Region"] == "aggregate"  # has no code at all
+    assert types["World"] == "aggregate"
+    assert types["Northern Region (UCDP)"] == "aggregate"
+
+
+def test_clean_counts_places_without_a_standard_code(raw):
+    """Places such as Abyei (a disputed area) have no 3-letter code but are still places.
+
+    Treating them as totals would drop their deaths from every chart and ranking.
+    """
+    extra = pd.DataFrame(
+        [["Disputed Area", None, 2025, 5], ["Old Federation", "OWID_OFD", 2025, 0]],
+        columns=raw.columns,
+    )
+    clean = transform.clean(pd.concat([raw, extra], ignore_index=True))
+    types = clean.groupby("entity")["entity_type"].first()
+    assert types["Disputed Area"] == "country"
+    assert types["Old Federation"] == "country"
 
 
 def test_clean_flags_preliminary_years(raw):
