@@ -8,7 +8,8 @@ The raw file has one row per place per year. This step:
   5. writes the result to a database table
 
 It does this for two files: the totals (table conflict_deaths) and the same
-deaths split by type of violence (table conflict_deaths_by_type).
+deaths split by type of violence (table conflict_deaths_by_type). A third,
+small file says which region each country is in (table country_regions).
 """
 
 import sqlite3
@@ -20,6 +21,7 @@ from . import config
 
 TABLE = "conflict_deaths"
 TYPE_TABLE = "conflict_deaths_by_type"
+REGION_TABLE = "country_regions"
 
 
 class DataQualityError(ValueError):
@@ -128,6 +130,53 @@ def _tidy_check_and_label(
     return df.sort_values(key_columns).reset_index(drop=True)
 
 
+def clean_regions(raw: pd.DataFrame, extra: dict[str, str] | None = None) -> pd.DataFrame:
+    """Turn the raw region list into a table of (entity, region), one row per place.
+
+    `extra` adds places the list leaves out (config.EXTRA_REGIONS by default).
+    If the list already has one of them, the list's own entry is kept.
+    """
+    extra = config.EXTRA_REGIONS if extra is None else extra
+
+    # --- 1. Check the shape we expect: Entity, then the region column last ---
+    if "Entity" not in raw.columns or len(raw.columns) < 2:
+        raise DataQualityError(f"Region file has unexpected columns: {list(raw.columns)}")
+    region_column = raw.columns[-1]
+    df = raw.rename(columns={"Entity": "entity", region_column: "region"})[["entity", "region"]]
+
+    # --- 2. Rules ---
+    if df["region"].isna().any():
+        raise DataQualityError("Region file has places with no region.")
+    if not df["region"].str.endswith("(UCDP)").all():
+        raise DataQualityError("Region file has regions that are not UCDP regions.")
+    duplicates = df["entity"].duplicated()
+    if duplicates.any():
+        examples = df.loc[duplicates, "entity"].head(3).tolist()
+        raise DataQualityError(f"The same place appears twice in the region file, e.g. {examples}")
+
+    # --- 3. Add the places placed by hand, unless the list already has them ---
+    missing = {place: region for place, region in extra.items() if place not in set(df["entity"])}
+    added = pd.DataFrame({"entity": list(missing), "region": list(missing.values())})
+    df = pd.concat([df, added], ignore_index=True)
+
+    return df.sort_values("entity").reset_index(drop=True)
+
+
+def check_every_place_has_region(clean: pd.DataFrame, regions: pd.DataFrame) -> None:
+    """Stop if any place with recorded deaths has no region.
+
+    Otherwise its deaths would silently disappear whenever a region is chosen.
+    The fix is to add the place to EXTRA_REGIONS in config.py.
+    """
+    places = clean.loc[(clean["entity_type"] == "country") & (clean["deaths"] > 0), "entity"]
+    without_region = sorted(set(places) - set(regions["entity"]))
+    if without_region:
+        raise DataQualityError(
+            f"Places with deaths but no region: {without_region}. "
+            "Add them to EXTRA_REGIONS in config.py."
+        )
+
+
 def load_to_sqlite(df: pd.DataFrame, db_path: Path = config.DB_PATH, table: str = TABLE) -> int:
     """Write a clean table to SQLite, replacing any previous version. Returns the row count."""
     db_path = Path(db_path)
@@ -136,7 +185,9 @@ def load_to_sqlite(df: pd.DataFrame, db_path: Path = config.DB_PATH, table: str 
     try:
         df.to_sql(table, con, if_exists="replace", index=False)
         # An index makes "all years for one country" lookups fast.
-        con.execute(f"CREATE INDEX IF NOT EXISTS idx_{table} ON {table} (entity, year)")
+        # The region table has no years and is small, so it needs none.
+        if "year" in df.columns:
+            con.execute(f"CREATE INDEX IF NOT EXISTS idx_{table} ON {table} (entity, year)")
         con.commit()
     finally:
         con.close()

@@ -36,29 +36,48 @@ def global_trend(con: sqlite3.Connection) -> pd.DataFrame:
     return pd.read_sql_query(query, con)
 
 
-def list_countries(con: sqlite3.Connection) -> list[str]:
+# Added to a WHERE clause to keep only places in one region. When :region is
+# empty (None) it keeps every place, so "no region chosen" means "all regions".
+IN_REGION = "(:region IS NULL OR entity IN (SELECT entity FROM country_regions WHERE region = :region))"
+
+
+def has_table(con: sqlite3.Connection, table: str) -> bool:
+    """True if the database has this table. Older databases may lack newer tables."""
+    query = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"
+    return con.execute(query, (table,)).fetchone() is not None
+
+
+def list_regions(con: sqlite3.Connection) -> list[str]:
+    """UCDP's regions, such as "Africa (UCDP)", in alphabetical order."""
+    query = "SELECT DISTINCT region FROM country_regions ORDER BY region"
+    return pd.read_sql_query(query, con)["region"].tolist()
+
+
+def list_countries(con: sqlite3.Connection, region: str | None = None) -> list[str]:
     """Every country that has recorded at least one death, in alphabetical order."""
-    query = """
+    query = f"""
         SELECT entity
         FROM conflict_deaths
-        WHERE entity_type = 'country'
+        WHERE entity_type = 'country' AND {IN_REGION}
         GROUP BY entity
         HAVING SUM(deaths) > 0
         ORDER BY entity
     """
-    return pd.read_sql_query(query, con)["entity"].tolist()
+    return pd.read_sql_query(query, con, params={"region": region})["entity"].tolist()
 
 
-def top_countries(con: sqlite3.Connection, year: int, n: int = 10) -> pd.DataFrame:
-    """The n countries with the most deaths in one year."""
-    query = """
+def top_countries(
+    con: sqlite3.Connection, year: int, n: int = 10, region: str | None = None
+) -> pd.DataFrame:
+    """The n countries with the most deaths in one year, optionally within one region."""
+    query = f"""
         SELECT entity AS country, deaths
         FROM conflict_deaths
-        WHERE entity_type = 'country' AND year = :year AND deaths > 0
+        WHERE entity_type = 'country' AND year = :year AND deaths > 0 AND {IN_REGION}
         ORDER BY deaths DESC, entity
         LIMIT :n
     """
-    return pd.read_sql_query(query, con, params={"year": year, "n": n})
+    return pd.read_sql_query(query, con, params={"year": year, "n": n, "region": region})
 
 
 def country_trend(con: sqlite3.Connection, country: str) -> pd.DataFrame:
@@ -78,8 +97,11 @@ def escalation_watchlist(
     baseline_years: int = config.BASELINE_YEARS,
     ratio: float = config.WATCHLIST_RATIO,
     min_deaths: int = config.WATCHLIST_MIN_DEATHS,
+    region: str | None = None,
 ) -> pd.DataFrame:
     """Countries where deaths in `year` are well above their own recent average.
+
+    Optionally only countries in one region.
 
     The baseline is the average of the `baseline_years` years before `year`.
     A country is listed when deaths are at least `min_deaths` and at least
@@ -89,11 +111,11 @@ def escalation_watchlist(
     This is a simple, explainable flag for an analyst to look into. It is not
     a forecast.
     """
-    query = """
+    query = f"""
         WITH latest AS (
             SELECT entity, deaths
             FROM conflict_deaths
-            WHERE entity_type = 'country' AND year = :year
+            WHERE entity_type = 'country' AND year = :year AND {IN_REGION}
         ),
         baseline AS (
             SELECT entity, AVG(deaths) AS baseline_avg
@@ -120,6 +142,7 @@ def escalation_watchlist(
         "baseline_end": year - 1,
         "ratio": ratio,
         "min_deaths": min_deaths,
+        "region": region,
     }
     return pd.read_sql_query(query, con, params=params)
 
@@ -130,8 +153,7 @@ def has_type_data(con: sqlite3.Connection) -> bool:
     A database built before this table was added will not have it until the
     pipeline is run again.
     """
-    query = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'conflict_deaths_by_type'"
-    return con.execute(query).fetchone() is not None
+    return has_table(con, "conflict_deaths_by_type")
 
 
 def deaths_by_type(con: sqlite3.Connection, country: str | None = None) -> pd.DataFrame:
@@ -153,17 +175,19 @@ def deaths_by_type(con: sqlite3.Connection, country: str | None = None) -> pd.Da
     return pd.read_sql_query(query, con, params={"country": country})
 
 
-def top_countries_by_type(con: sqlite3.Connection, year: int, n: int = 10) -> pd.DataFrame:
+def top_countries_by_type(
+    con: sqlite3.Connection, year: int, n: int = 10, region: str | None = None
+) -> pd.DataFrame:
     """The same n countries as top_countries(), with each one's deaths split by type of violence.
 
     One row per country and type. `total` is the country's total that year, used
     to keep the countries in the same order as the top_countries() chart.
     """
-    query = """
+    query = f"""
         WITH top AS (
             SELECT entity, deaths AS total
             FROM conflict_deaths
-            WHERE entity_type = 'country' AND year = :year AND deaths > 0
+            WHERE entity_type = 'country' AND year = :year AND deaths > 0 AND {IN_REGION}
             ORDER BY deaths DESC, entity
             LIMIT :n
         )
@@ -177,7 +201,34 @@ def top_countries_by_type(con: sqlite3.Connection, year: int, n: int = 10) -> pd
         WHERE by_type.deaths > 0
         ORDER BY top.total DESC, top.entity, by_type.violence_type
     """
-    return pd.read_sql_query(query, con, params={"year": year, "n": n})
+    return pd.read_sql_query(query, con, params={"year": year, "n": n, "region": region})
+
+
+def region_check(con: sqlite3.Connection) -> pd.DataFrame:
+    """Compare our country totals per region with UCDP's own region figure, year by year.
+
+    Small differences are expected: UCDP files a few conflicts under a
+    neighbouring region (for example near the border of Europe and Asia),
+    while this project places deaths by the country where they happened.
+    """
+    query = """
+        WITH ours AS (
+            SELECT regions.region, deaths.year, SUM(deaths.deaths) AS sum_of_countries
+            FROM conflict_deaths AS deaths
+            JOIN country_regions AS regions ON regions.entity = deaths.entity
+            WHERE deaths.entity_type = 'country'
+            GROUP BY regions.region, deaths.year
+        )
+        SELECT ours.region,
+               ours.year,
+               ours.sum_of_countries,
+               ucdp.deaths                           AS region_figure,
+               ours.sum_of_countries - ucdp.deaths   AS difference
+        FROM ours
+        JOIN conflict_deaths AS ucdp ON ucdp.entity = ours.region AND ucdp.year = ours.year
+        ORDER BY ours.region, ours.year
+    """
+    return pd.read_sql_query(query, con)
 
 
 def type_check(con: sqlite3.Connection) -> pd.DataFrame:

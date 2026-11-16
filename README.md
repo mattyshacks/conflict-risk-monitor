@@ -10,6 +10,7 @@ It is a learning project. The aim was to build one data product end to end: coll
 - **Dashboard.** Shows the worldwide trend, the ten most affected countries in a chosen year, and a trend for any country.
 - **Type of violence.** Splits deaths, worldwide and for each country, into fighting between states, civil conflict, fighting between armed groups, and violence against civilians.
 - **Escalation watchlist.** Lists countries whose deaths in a year are well above their own five-year average. The thresholds can be changed on screen.
+- **Region filter.** Narrows the rankings, watchlist and country list to one of UCDP's five regions: Africa, the Americas, Asia and Oceania, Europe, and the Middle East.
 - **Country brief.** Writes a short paragraph for any country, built only from figures in the database and marked as a draft for analyst review.
 
 ## How it works
@@ -53,18 +54,18 @@ pytest                     # run the tests
 streamlit run app.py       # open the dashboard
 ```
 
-If the download is blocked on your network, download the full CSV by hand from both source pages, [totals](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-country) and [split by type](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-type), and run:
+If the download is blocked on your network, download the full CSV by hand from all three source pages, [totals](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-country), [split by type](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-type) and [regions](https://ourworldindata.org/grapher/world-regions-according-to-ucdp), and run:
 
 ```bash
-python run_pipeline.py --source path/to/totals.csv --type-source path/to/by_type.csv
+python run_pipeline.py --source path/to/totals.csv --type-source path/to/by_type.csv --region-source path/to/regions.csv
 ```
 
-The two options must be used together, so the database never mixes two different releases.
+The three options must be used together, so the database never mixes different releases.
 
 To see the dashboard without any real data, use the fictional sample files:
 
 ```bash
-python run_pipeline.py --source tests/fixtures/sample_conflict_deaths.csv --type-source tests/fixtures/sample_conflict_deaths_by_type.csv
+python run_pipeline.py --source tests/fixtures/sample_conflict_deaths.csv --type-source tests/fixtures/sample_conflict_deaths_by_type.csv --region-source tests/fixtures/sample_regions.csv
 ```
 
 ### Viewing the dashboard on other devices
@@ -110,7 +111,9 @@ Notes:
 
 **Split by type of violence.** A second file, [Deaths in armed conflicts by type](https://ourworldindata.org/grapher/deaths-in-armed-conflicts-by-type), from the same publisher, splits the same deaths into UCDP's five types: interstate (between states), intrastate (civil conflict), non-state (between armed groups), one-sided violence (against civilians) and extrasystemic (none since 1989). It is built from the same UCDP events and assigns them to countries the same way, so the pipeline checks that the five types add up exactly to the total for every place and year. It is published for full years only, so there is no split for the preliminary year. The type says what kind of violence it was, not why a conflict started.
 
-**Provenance.** Each download writes a record in `data/raw/` (`download_metadata.json` for the totals, `download_metadata_by_type.json` for the split by type) with the URL, the time, and a fingerprint (SHA-256) of the file. The dashboard shows the retrieval date.
+**Regions.** A third file, [World regions according to UCDP](https://ourworldindata.org/grapher/world-regions-according-to-ucdp), says which of UCDP's five regions each country is in. It leaves out three places with recorded deaths, so they are placed by hand in `EXTRA_REGIONS` in `config.py`, each where its neighbours are listed: Palestine in the Middle East, Abyei and Western Sahara in Africa. The pipeline stops if any other place with deaths has no region. It also compares the country totals in each region with UCDP's own region figures: they match in most years, but not all, because UCDP files a few conflicts under a neighbouring region (for example near the border of Europe and Asia in 1989 and 1990), while this project places deaths by the country where they happened.
+
+**Provenance.** Each download writes a record in `data/raw/` (`download_metadata.json` for the totals, `download_metadata_by_type.json` for the split by type, `download_metadata_regions.json` for the regions) with the URL, the time, and a fingerprint (SHA-256) of the file. The dashboard shows the retrieval date.
 
 **Licence.** Our World in Data's own work is CC BY 4.0. The underlying data belongs to UCDP and is subject to UCDP's terms, which should be checked before any commercial use. Cite: Davies, Pettersson and Öberg (2026), "Organized violence 1989–2025, and violent political protests", *Journal of Peace Research*. The data itself is not stored in this repository.
 
@@ -146,7 +149,7 @@ How each part would map onto a Microsoft data stack. This is my reading of the d
 - [ ] Recent headlines for the preliminary year, shown as clearly labelled links and kept out of the generated brief
 - [ ] Brief written by a language model, grounded in `country_facts()`, with the template kept as a fallback
 - [ ] Deaths per 100,000 people, by joining a population dataset
-- [ ] Region filter
+- [x] Region filter
 - [ ] Scheduled refresh, with an alert when a country joins the watchlist
 
 ## How it was built
